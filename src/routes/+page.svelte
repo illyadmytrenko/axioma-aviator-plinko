@@ -6,6 +6,7 @@
 	let interval;
 	let aviatorEl: HTMLImageElement;
 	let graphEl: HTMLDivElement;
+	let trailEl: SVGElement;
 
 	let points: { x: number; y: number }[] = [];
 
@@ -31,10 +32,10 @@
 		flyStart = true;
 		flyIn();
 
-		endMultiplier = Math.random() * 5;
+		endMultiplier = Math.random() * 20;
 
 		interval = setInterval(() => {
-			multiplier += Math.random() * 0.05;
+			multiplier *= 1 + Math.random() * 0.03;
 
 			if (multiplier > endMultiplier) {
 				endGame();
@@ -126,9 +127,10 @@
 			const planeRect = aviatorEl.getBoundingClientRect();
 
 			const svgX =
-				((planeRect.left + planeRect.width / 2 - svgRect.left) / svgRect.width) * 275 - 10;
+				((planeRect.left + planeRect.width / 2 - svgRect.left) / svgRect.width) * 275 - 15;
 			const svgY =
-				((planeRect.top + planeRect.height / 2 - svgRect.top) / svgRect.height) * 223 + 10;
+				((planeRect.top + planeRect.height / 2 - svgRect.top) / svgRect.height) * 223 + 5;
+			console.log(planeRect.top);
 
 			points.push({ x: svgX, y: svgY });
 			updatePolyline();
@@ -146,23 +148,30 @@
 	}
 
 	function floatInPlace() {
-		function animateFloat() {
-			if (!isFloating) return;
-			if (isEnding) return;
+		// Начальные значения
+		const minScale = 0.5;
+		const duration = 10000;
+		const floatStartTime = performance.now();
 
-			offsetY = Math.sin(Date.now() / 500) * 5;
-			offsetX = Math.sin(Date.now() / 700) * 3;
-			angle = Math.sin(Date.now() / 300) * 3;
+		function animateFloat(now) {
+			if (!isFloating || isEnding) return;
 
-			aviatorEl.style.transform = `translate(${x + offsetX}px, ${y + offsetY}px) rotate(${angle}deg)`;
+			const elapsed = now - floatStartTime;
+			const t = Math.min(elapsed / duration, 1);
 
-			// scaleFactor = Math.min(3, scaleFactor + 0.01);
-			// trailGroup.setAttribute('transform', `scale(${scaleFactor})`);
+			// Текущий масштаб
+			const scale = 1 - (1 - minScale) * t;
+
+			// Установка новых размеров графика
+
+			// Колебания самолета
+			angle = Math.sin(now / 300) * 3;
+			aviatorEl.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
 
 			requestAnimationFrame(animateFloat);
 		}
 
-		animateFloat();
+		requestAnimationFrame(animateFloat);
 	}
 
 	function endFlyAway() {
@@ -178,13 +187,6 @@
 			angle = Math.sin(performance.now() / 300) * 5;
 
 			aviatorEl.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
-
-			// Обновляем линию
-			const svgRect = trailFillPath.closest('svg').getBoundingClientRect();
-			const planeRect = aviatorEl.getBoundingClientRect();
-
-			const svgX = ((planeRect.left + planeRect.width / 2 - svgRect.left) / svgRect.width) * 275;
-			const svgY = ((planeRect.top + planeRect.height / 2 - svgRect.top) / svgRect.height) * 223;
 
 			requestAnimationFrame(animateFlyAway);
 		}
@@ -213,7 +215,12 @@
 		<span class={multiplier > endMultiplier ? 'multiplier end-multiplier' : 'multiplier'}
 			>{multiplier.toFixed(2)}x</span
 		>
-		<svg class="trail" viewBox="0 0 275 220" preserveAspectRatio="none">
+		<svg
+			class={isFloating ? 'graph-animation trail' : 'trail'}
+			viewBox="0 0 270 220"
+			preserveAspectRatio="none"
+			bind:this={trailEl}
+		>
 			<g bind:this={trailGroup}>
 				<!-- Заливка -->
 				<path bind:this={trailFillPath} fill="#008BB6" opacity="0.3" />
@@ -229,7 +236,12 @@
 		</svg>
 
 		<div class="plane">
-			<img src="/images/aviator.png" alt="plane" bind:this={aviatorEl} />
+			<img
+				src="/images/aviator.png"
+				alt="plane"
+				bind:this={aviatorEl}
+				class={isFloating ? 'up-down' : ''}
+			/>
 		</div>
 	</div>
 
@@ -345,9 +357,8 @@
 
 	.plane {
 		position: absolute;
-		/* bottom: 5%; */
-		bottom: 0;
-		left: -3%;
+		bottom: -1%;
+		left: -4%;
 		width: 70px;
 		height: 60px;
 	}
@@ -432,5 +443,48 @@
 
 	.graph-wrapper.rotate {
 		animation: rotate-circle 30s linear infinite;
+	}
+
+	@keyframes up-down {
+		0% {
+			top: 0;
+			left: 0;
+		}
+		50% {
+			top: 80px;
+			left: 20px;
+		}
+		100% {
+			top: 0;
+			left: 0;
+		}
+	}
+
+	.up-down {
+		animation: up-down 7s ease-in-out infinite;
+		position: relative;
+	}
+
+	@keyframes graph-shrink-up {
+		0% {
+			width: 100%;
+			height: 300px;
+			top: 0;
+		}
+		50% {
+			width: calc(100% + 40px);
+			height: 200px;
+			top: 100px;
+		}
+		100% {
+			width: 100%;
+			height: 300px;
+			top: 0;
+		}
+	}
+
+	.graph-animation {
+		left: 0;
+		animation: 7s graph-shrink-up 0.7s ease-out infinite;
 	}
 </style>
