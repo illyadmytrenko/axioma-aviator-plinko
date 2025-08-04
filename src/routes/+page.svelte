@@ -59,15 +59,16 @@
 		0.001 // 75.5
 	];
 
-	function getColor(coeff) {
-		console.log(coeff);
-		if (coeff === 75.5) return 'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)';
-		if (coeff === 10) return 'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)';
-		if (coeff === 3) return 'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)';
-		if (coeff === 0.8) return 'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)';
-		if (coeff === 0.3) return 'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)';
+	let historyColors: string[] = [];
+
+	$: historyColors = lastFiveWinCoeffs.map((historyItem) => {
+		if (historyItem === 75.5) return 'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)';
+		if (historyItem === 10) return 'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)';
+		if (historyItem === 3) return 'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)';
+		if (historyItem === 0.8) return 'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)';
+		if (historyItem === 0.3) return 'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)';
 		return 'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)';
-	}
+	});
 
 	let betSum = 1;
 	let winSum = 0;
@@ -373,7 +374,10 @@
 	<div class="board" style={`--rows: ${rows}; --spacing: ${spacing}px; --maxCols: ${maxCols};`}>
 		<aside class="board__aside">
 			{#each lastFiveWinCoeffs.slice().reverse() as coeff}
-				<div class="board__aside-coeff" style="background-color: {getColor(coeff)}">
+				<div
+					class="board__aside-coeff"
+					style="background: {historyColors[lastFiveWinCoeffs.indexOf(coeff)]};"
+				>
 					{coeff.toFixed(2)}x
 				</div>
 			{/each}
