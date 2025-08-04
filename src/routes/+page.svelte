@@ -47,15 +47,15 @@
 	];
 	const probabilitiesMedium = [
 		0.001, // 75.5
-		0.015, // 10
+		0.005, // 10
 		0.03, // 3
 		0.114, // 0.8
 		0.16, // 0.3
-		0.36, // 0.2
+		0.38, // 0.2
 		0.16, // 0.3
 		0.114, // 0.8
 		0.03, // 3
-		0.015, // 10
+		0.005, // 10
 		0.001 // 75.5
 	];
 
@@ -144,12 +144,12 @@
 			console.log(candidates, randomIdx);
 			if (randomIdx === 1) {
 				forceMultiplier = 0.00002;
-				offsetX = Math.random() * spacing * 0.2;
+				offsetX = Math.random() * spacing * 0.1;
 			} else {
-				offsetX = -1 * Math.random() * spacing * 0.2;
+				offsetX = -1 * Math.random() * spacing * 0.1;
 			}
 			if (candidates.length === 1) {
-				offsetX = Math.random() * spacing * 0.5 - spacing * 0.25;
+				offsetX = Math.random() * spacing * 0.1 - spacing * 0.05;
 			}
 			return candidates[randomIdx];
 		}
@@ -161,21 +161,29 @@
 	function dropBall() {
 		const targetIndex = chooseTargetIndex();
 		const startY = -20;
-		const ballRadius = spacing / 2 / 2.5;
+		const ballRadius = spacing / 2 / 1.6;
 
 		const center = Math.floor(maxCols / 2);
 		const startX = center * spacing + offsetX;
 		// const startX = center * spacing;
 
 		const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
-			label: 'ball',
-			restitution: 0.6,
+			// label: 'ball',
+			// restitution: 0.9,
+			// density: 0.06,
+			// friction: 0.2,
+			// frictionAir: 0.25,
+			// collisionFilter: {
+			// 	group: -1
+			// }
+			restitution: 0.1, // тоже упругий
 			density: 0.06,
 			friction: 0.2,
-			frictionAir: 0.25,
+			frictionAir: 0.1,
 			collisionFilter: {
 				group: -1
-			}
+			},
+			label: 'ball'
 		});
 
 		const targetX =
@@ -183,13 +191,13 @@
 				? targetIndex * spacing + spacing / 2
 				: (targetIndex + 1) * spacing + spacing / 2;
 
-		setTimeout(() => {
-			Matter.World.add(engine.world, newBall);
-			allBalls = [...allBalls, { id: nextBallId++, body: newBall, targetX }];
+		Matter.World.add(engine.world, newBall);
+		allBalls = [...allBalls, { id: nextBallId++, body: newBall, targetX }];
 
+		setTimeout(() => {
 			let localForce = forceMultiplier;
 			const forceInterval = setInterval(() => {
-				localForce = Math.min(forceMultiplier, localForce + 0.000002);
+				localForce = Math.min(forceMultiplier, localForce + 0.000001);
 			}, 30);
 
 			const attractor = () => {
@@ -198,7 +206,7 @@
 					const time = performance.now() / 1000;
 
 					if (!newBall['intermediateTargetX']) {
-						const range = spacing * 4;
+						const range = spacing * 6;
 						newBall['intermediateTargetX'] =
 							newBall.position.x + (Math.random() * range - range / 2);
 					}
@@ -241,7 +249,7 @@
 			if (!renderFrame) {
 				update();
 			}
-		}, 100);
+		}, 700);
 	}
 
 	function update() {
@@ -337,8 +345,10 @@
 		pegs.forEach(({ x, y, label }) => {
 			const pegBody = Matter.Bodies.circle(x, y, pegRadius, {
 				isStatic: true,
-				friction: 0.2,
-				label
+				restitution: 1, // Упругость — 1.0 = идеально упругое тело
+				friction: 0.1,
+				frictionAir: 0.001,
+				label: 'peg'
 			});
 			Matter.World.add(engine.world, pegBody);
 		});
@@ -516,12 +526,15 @@
 		left: 50%;
 		top: -20px;
 		transform: translate(-50%, -50%);
+		width: calc(var(--spacing));
+		height: calc(var(--spacing));
+		border-radius: 50%;
 	}
 
 	.board__ball {
 		position: absolute;
-		width: calc(var(--spacing) / 2);
-		height: calc(var(--spacing) / 2);
+		width: calc(var(--spacing) / 1.7);
+		height: calc(var(--spacing) / 1.7);
 		background: url('./images/ball.png');
 		border-radius: 50%;
 		z-index: 10;
@@ -646,14 +659,16 @@
 	@keyframes transparent {
 		0% {
 			opacity: 0;
+			top: -10px;
 		}
 		100% {
 			opacity: 1;
+			top: 0;
 		}
 	}
 
 	.transparent-animation {
-		animation: transparent 0.2s ease-in-out;
+		animation: 0.5s transparent ease-in-out;
 	}
 
 	.board__multiplier.jump {
