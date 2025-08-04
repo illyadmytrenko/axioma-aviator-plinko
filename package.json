@@ -53,5 +53,8 @@
 	},
 	"keywords": [
 		"svelte"
-	]
+	],
+	"dependencies": {
+		"matter-js": "^0.20.0"
+	}
 }

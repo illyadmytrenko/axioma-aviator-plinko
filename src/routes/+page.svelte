@@ -1,490 +1,696 @@
 <script lang="ts">
-	let multiplier = 1.0;
-	let amount = 1.0;
-	let history = [];
+	import { onMount } from 'svelte';
+	import Matter from 'matter-js';
 
-	let interval;
-	let aviatorEl: HTMLImageElement;
-	let graphEl: HTMLDivElement;
-	let trailEl: SVGElement;
+	let engine: Matter.Engine;
+	let renderFrame: number;
 
-	let points: { x: number; y: number }[] = [];
+	const multipliersEasy = [2, 1.5, 1.2, 1, 0.8, 1, 1.2, 1.5, 2];
+	const probabilitiesEasy = [
+		0.03, // 2x
+		0.06, // 1.5x
+		0.09, // 1.2x
+		0.12, // 1x
+		0.4, // 0.8x
+		0.12, // 1x
+		0.09, // 1.2x
+		0.06, // 1.5x
+		0.03 // 2x
+	];
 
-	let x = 0;
-	let y = 0;
-	let angle = 0;
-	let step = 0;
-	let offsetY = 0;
+	const multipliersMedium = [75.5, 10, 3, 0.8, 0.3, 0.2, 0.3, 0.8, 3, 10, 75.5];
+	const multipliersColors = [
+		'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)',
+		'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
+		'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)',
+		'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)',
+		'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)',
+		'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)',
+		'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)',
+		'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)',
+		'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)',
+		'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
+		'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)'
+	];
+	const multipliersShadows = [
+		'0px 4px 0px 0px #B80721',
+		'0px 4px 0px 0px #B41006',
+		'0px 4px 0px 0px #BF2A08',
+		'0px 4px 0px 0px #BA360D',
+		'0px 4px 0px 0px #BA530F',
+		'0px 4px 0px 0px #A97713',
+		'0px 4px 0px 0px #BA530F',
+		'0px 4px 0px 0px #BA360D',
+		'0px 4px 0px 0px #BF2A08',
+		'0px 4px 0px 0px #B41006',
+		'0px 4px 0px 0px #B80721'
+	];
+	const probabilitiesMedium = [
+		0.001, // 75.5
+		0.015, // 10
+		0.03, // 3
+		0.114, // 0.8
+		0.16, // 0.3
+		0.36, // 0.2
+		0.16, // 0.3
+		0.114, // 0.8
+		0.03, // 3
+		0.015, // 10
+		0.001 // 75.5
+	];
+
+	function getColor(coeff) {
+		console.log(coeff);
+		if (coeff === 75.5) return 'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)';
+		if (coeff === 10) return 'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)';
+		if (coeff === 3) return 'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)';
+		if (coeff === 0.8) return 'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)';
+		if (coeff === 0.3) return 'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)';
+		return 'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)';
+	}
+
+	let betSum = 1;
+	let winSum = 0;
+
+	console.log(probabilitiesMedium.reduce((acc, prob) => acc + prob, 0));
+
+	const rtp = multipliersMedium.reduce((acc, mult, i) => acc + mult * probabilitiesMedium[i], 0);
+	console.log('RTP:', rtp); // ~0.98
+
+	const multipliersHard = [100, 10, 5, 2, 0, 2, 5, 10, 100];
+	const probabilitiesHard = [
+		0.005, // 100x
+		0.01, // 10x
+		0.025, // 5x
+		0.05, // 2x
+		0.82, // 0x
+		0.05, // 2x
+		0.025, // 5x
+		0.01, // 10x
+		0.005 // 100x
+	]; // сумма = 1.0
+
+	let multipliers = multipliersMedium;
+	let probabilities = probabilitiesMedium;
+
+	const minCols = 3;
+	const maxCols = 12;
+	const spacing = 32; // important
+	const rows = maxCols - minCols + 1;
+
+	// for counting rtp
+	let totalWins = 0;
+	let totalPlays = 0;
+	let averageMultiplier = 0;
+	const slotCount = multipliers.length;
+	const slotWidth = spacing;
+
+	let lastFiveWinCoeffs = [];
+
+	let jumpingMultipliers = Array(multipliers.length).fill(false);
+
+	let forceMultiplier = 0.00001;
 	let offsetX = 0;
-	let isFloating = false;
-	let flyStart = true;
 
-	let endMultiplier: number;
+	let allBalls: { id: number; body: Matter.Body; targetX: number }[] = [];
+	let nextBallId = 0;
 
-	function startGame() {
-		multiplier = 1.0;
-		history = [multiplier, ...history.slice(0, 14)];
-		clearInterval(interval);
-		step = 0;
-		x = aviatorEl.x;
-		y = aviatorEl.y;
-		isFloating = false;
-		flyStart = true;
-		flyIn();
+	function getColsForRow(row: number) {
+		return Math.min(minCols + row, maxCols);
+	}
 
-		endMultiplier = Math.random() * 20;
+	function chooseTargetIndex(): number {
+		const r = Math.random();
+		let acc = 0;
 
-		interval = setInterval(() => {
-			multiplier *= 1 + Math.random() * 0.03;
+		let candidates: number[] = [];
+		let candidateProb = 0;
 
-			if (multiplier > endMultiplier) {
-				endGame();
+		for (let i = 0; i < probabilities.length; i++) {
+			acc += probabilities[i];
+			if (r <= acc) {
+				// Найдём все индексы с такой же вероятностью
+				candidateProb = probabilities[i];
+				candidates = probabilities
+					.map((p, idx) => (p === candidateProb ? idx : -1))
+					.filter((idx) => idx !== -1);
+				break;
+			}
+		}
+
+		if (candidates.length > 0) {
+			const randomIdx = Math.floor(Math.random() * candidates.length);
+			console.log(candidates, randomIdx);
+			if (randomIdx === 1) {
+				forceMultiplier = 0.00002;
+				offsetX = Math.random() * spacing * 0.2;
+			} else {
+				offsetX = -1 * Math.random() * spacing * 0.2;
+			}
+			if (candidates.length === 1) {
+				offsetX = Math.random() * spacing * 0.5 - spacing * 0.25;
+			}
+			return candidates[randomIdx];
+		}
+
+		// fallback — если вдруг не сработало
+		return probabilities.length - 1;
+	}
+
+	function dropBall() {
+		const targetIndex = chooseTargetIndex();
+		const startY = -20;
+		const ballRadius = spacing / 2 / 2.5;
+
+		const center = Math.floor(maxCols / 2);
+		const startX = center * spacing + offsetX;
+		// const startX = center * spacing;
+
+		const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
+			label: 'ball',
+			restitution: 0.6,
+			density: 0.06,
+			friction: 0.2,
+			frictionAir: 0.25,
+			collisionFilter: {
+				group: -1
+			}
+		});
+
+		const targetX =
+			targetIndex < center
+				? targetIndex * spacing + spacing / 2
+				: (targetIndex + 1) * spacing + spacing / 2;
+
+		setTimeout(() => {
+			Matter.World.add(engine.world, newBall);
+			allBalls = [...allBalls, { id: nextBallId++, body: newBall, targetX }];
+
+			let localForce = forceMultiplier;
+			const forceInterval = setInterval(() => {
+				localForce = Math.min(forceMultiplier, localForce + 0.000002);
+			}, 30);
+
+			const attractor = () => {
+				if (newBall.position.y < (rows - 1) * spacing) {
+					const dy = newBall.position.y;
+					const time = performance.now() / 1000;
+
+					if (!newBall['intermediateTargetX']) {
+						const range = spacing * 4;
+						newBall['intermediateTargetX'] =
+							newBall.position.x + (Math.random() * range - range / 2);
+					}
+					const intermediateX = newBall['intermediateTargetX'];
+
+					// Прогресс — на сколько глубоко шарик прошёл
+					const progress = Math.min(dy / ((rows - 1) * spacing), 1);
+
+					// Более "плавное" приближение: easeInOut
+					const smoothProgress = 0.5 * (1 - Math.cos(Math.PI * progress));
+
+					const dynamicTargetX = intermediateX + (targetX - intermediateX) * smoothProgress;
+
+					const dx = dynamicTargetX - newBall.position.x;
+					const dxNorm = Math.min(Math.abs(dx) / spacing, 1.5);
+
+					// Уменьшаем дрожание
+					const oscillation = Math.sin(time * 2.5 + newBall.id) * 0.08;
+
+					// Новый коэффициент притяжения
+					const magnetBoost = 1 + 2.2 * smoothProgress + 1.2 * dxNorm;
+
+					// Более мягкое усиление на краях
+					const centerIndex = (slotCount - 1) / 2;
+					const edgeBias = 1 + Math.pow(Math.abs(targetIndex - centerIndex), 1.1) * 0.08;
+
+					const forceX = (dx + oscillation * spacing) * localForce * magnetBoost * edgeBias;
+
+					Matter.Body.applyForce(newBall, newBall.position, { x: forceX, y: 0 });
+				} else {
+					Matter.Events.off(engine, 'beforeUpdate', attractor);
+					clearInterval(forceInterval);
+				}
+			};
+
+			setTimeout(() => {
+				Matter.Events.on(engine, 'beforeUpdate', attractor);
+			}, 70);
+
+			if (!renderFrame) {
+				update();
 			}
 		}, 100);
 	}
 
-	let isEnding = false;
+	function update() {
+		Matter.Engine.update(engine);
 
-	function endGame() {
-		clearInterval(interval);
-		isEnding = true;
-		endFlyAway();
-	}
+		for (let i = allBalls.length - 1; i >= 0; i--) {
+			const ball = allBalls[i];
+			const { x, y } = ball.body.position;
 
-	let trailFillPath;
-	let trailStrokePath;
-	let trailGroup;
-	let scaleFactor = 1;
+			if (y > (rows + 0.65) * spacing) {
+				// console.log(x, slotWidth);
+				const finalIndex = Math.min(slotCount - 1, Math.max(0, Math.floor((x - 3) / slotWidth)));
+				// console.log('finalIndex', finalIndex);
+				totalWins += multipliers[finalIndex];
+				winSum = betSum * multipliers[finalIndex];
+				totalPlays += 1;
+				averageMultiplier = +(totalWins / totalPlays).toFixed(3);
+				pegs = pegs.map((p) => ({ ...p, highlighted: false }));
+				Matter.World.remove(engine.world, ball.body);
+				allBalls.splice(i, 1);
 
-	let graphWrapper;
+				jumpingMultipliers[finalIndex] = true;
+				setTimeout(() => {
+					jumpingMultipliers[finalIndex] = false;
+				}, 300);
 
-	function catmullRom2bezier(points) {
-		if (points.length < 2) return '';
+				lastFiveWinCoeffs.push(multipliers[finalIndex]);
+				if (lastFiveWinCoeffs.length > 5) {
+					lastFiveWinCoeffs.shift();
+				}
+				lastFiveWinCoeffs = [...lastFiveWinCoeffs];
 
-		let d = `M ${points[0].x},${points[0].y}`;
-
-		for (let i = 0; i < points.length - 1; i++) {
-			const p0 = points[i - 1] || points[i];
-			const p1 = points[i];
-			const p2 = points[i + 1];
-			const p3 = points[i + 2] || p2;
-
-			const cp1x = p1.x + (p2.x - p0.x) / 6;
-			const cp1y = p1.y + (p2.y - p0.y) / 6;
-
-			const cp2x = p2.x - (p3.x - p1.x) / 6;
-			const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-			d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
-		}
-
-		return d;
-	}
-
-	function updatePolyline() {
-		if (points.length < 2) return;
-
-		const strokeD = catmullRom2bezier(points);
-
-		// Заливка под линией
-		const last = points[points.length - 1];
-		const fillD = `${strokeD} L ${last.x},223 L 0,223 Z`;
-
-		trailFillPath.setAttribute('d', fillD);
-		trailStrokePath.setAttribute('d', strokeD);
-	}
-
-	function flyIn() {
-		const startTime = performance.now();
-		step = 0;
-		const speed = 0.0009;
-		const maxY =
-			graphEl.getBoundingClientRect().height - aviatorEl.getBoundingClientRect().height - 20;
-
-		function animateFlyIn(now) {
-			if (isEnding) return;
-			step += speed;
-
-			// if (now - startTime > 1000) {
-			// 	// Плавная параболическая траектория
-			// 	x = step * 900;
-			// 	y = -Math.pow(step * 300, 0.4); // Плавный взлёт, можешь поэкспериментировать с показателем
-			// } else {
-			// Плавная параболическая траектория
-			x = step * 250;
-			y = -Math.pow(x / 600, 2.1) * 1600; // Парабола: y = -k*x^2
-
-			// }
-
-			// Угол колебания
-			angle = Math.sin(now / 1000) * 5;
-
-			// Двигаем самолёт
-			aviatorEl.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
-
-			// Переводим координаты самолёта в SVG-систему
-			const svgRect = trailFillPath.closest('svg').getBoundingClientRect();
-			const planeRect = aviatorEl.getBoundingClientRect();
-
-			const svgX =
-				((planeRect.left + planeRect.width / 2 - svgRect.left) / svgRect.width) * 275 - 15;
-			const svgY =
-				((planeRect.top + planeRect.height / 2 - svgRect.top) / svgRect.height) * 223 + 5;
-			console.log(planeRect.top);
-
-			points.push({ x: svgX, y: svgY });
-			updatePolyline();
-
-			// Продолжаем анимацию до достижения максимальной высоты
-			if (-y < maxY) {
-				requestAnimationFrame(animateFlyIn);
-			} else {
-				isFloating = true;
-				floatInPlace();
+				console.log(totalWins, totalPlays, averageMultiplier);
 			}
 		}
 
-		requestAnimationFrame(animateFlyIn);
+		allBalls = [...allBalls];
+
+		if (allBalls.length > 0) {
+			renderFrame = requestAnimationFrame(update);
+		} else {
+			cancelAnimationFrame(renderFrame);
+			renderFrame = null;
+		}
 	}
 
-	function floatInPlace() {
-		// Начальные значения
-		const minScale = 0.5;
-		const duration = 10000;
-		const floatStartTime = performance.now();
-
-		function animateFloat(now) {
-			if (!isFloating || isEnding) return;
-
-			const elapsed = now - floatStartTime;
-			const t = Math.min(elapsed / duration, 1);
-
-			// Текущий масштаб
-			const scale = 1 - (1 - minScale) * t;
-
-			// Установка новых размеров графика
-
-			// Колебания самолета
-			angle = Math.sin(now / 300) * 3;
-			aviatorEl.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
-
-			requestAnimationFrame(animateFloat);
+	function highlightPeg(label: string) {
+		const peg = pegs.find((p) => p.label === label);
+		if (peg) {
+			peg.highlighted = true;
+			setTimeout(() => {
+				peg.highlighted = false;
+			}, 50);
 		}
-
-		requestAnimationFrame(animateFloat);
 	}
 
-	function endFlyAway() {
-		const speedY = -3;
-		const speedX = 2;
-
-		function animateFlyAway() {
-			if (!isEnding) return;
-
-			y += speedY;
-			x += speedX;
-
-			angle = Math.sin(performance.now() / 300) * 5;
-
-			aviatorEl.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
-
-			requestAnimationFrame(animateFlyAway);
+	function changeDifficulty(difficulty: 'easy' | 'medium' | 'hard') {
+		switch (difficulty) {
+			case 'easy':
+				multipliers = multipliersEasy;
+				probabilities = probabilitiesEasy;
+				break;
+			case 'medium':
+				multipliers = multipliersMedium;
+				probabilities = probabilitiesMedium;
+				break;
+			case 'hard':
+				multipliers = multipliersHard;
+				probabilities = probabilitiesHard;
+				break;
+			default:
+				multipliers = multipliersMedium;
 		}
-		requestAnimationFrame(animateFlyAway);
+	}
+
+	let pegs: { label: string; x: number; y: number; highlighted: boolean }[] = [];
+
+	for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
+		const cols = getColsForRow(rowIdx);
+		for (let colIdx = 0; colIdx < cols; colIdx++) {
+			const x = colIdx * spacing + spacing / 2.2 + ((maxCols - cols) * spacing) / 2;
+			const y = rowIdx * spacing + spacing;
+			const label = `peg-${rowIdx}-${colIdx}`;
+			pegs.push({ label, x, y, highlighted: false });
+		}
+	}
+
+	onMount(() => {
+		engine = Matter.Engine.create();
+
+		const pegRadius = spacing / 5;
+
+		pegs.forEach(({ x, y, label }) => {
+			const pegBody = Matter.Bodies.circle(x, y, pegRadius, {
+				isStatic: true,
+				friction: 0.2,
+				label
+			});
+			Matter.World.add(engine.world, pegBody);
+		});
+
+		Matter.Events.on(engine, 'collisionStart', (event) => {
+			for (const pair of event.pairs) {
+				const { bodyA, bodyB } = pair;
+
+				let pegBody = null;
+				if (bodyA.label === 'ball' && bodyB.label.startsWith('peg')) pegBody = bodyB;
+				if (bodyB.label === 'ball' && bodyA.label.startsWith('peg')) pegBody = bodyA;
+
+				if (pegBody) {
+					pegs = [...pegs];
+					highlightPeg(pegBody.label);
+				}
+			}
+		});
+	});
+
+	function changeBet(operation: string) {
+		if (operation === 'minus') {
+			if (betSum >= 0.2) {
+				betSum -= 0.1;
+			}
+		} else {
+			betSum += 0.1;
+		}
 	}
 </script>
 
-<div class="game-container">
-	<!-- История -->
-	<div class="history">
-		{#each history as h}
-			<span class:highlight={h > 5}>{h.toFixed(2)}x</span>
+<div class="container">
+	<div class="board" style={`--rows: ${rows}; --spacing: ${spacing}px; --maxCols: ${maxCols};`}>
+		<aside class="board__aside">
+			{#each lastFiveWinCoeffs.slice().reverse() as coeff}
+				<div class="board__aside-coeff" style="background-color: {getColor(coeff)}">
+					{coeff.toFixed(2)}x
+				</div>
+			{/each}
+		</aside>
+
+		<!-- {#each Array(rows) as _, rowIdx}
+		{#each Array(getColsForRow(rowIdx)) as _, colIdx}
+			<div
+				data-id={`peg-${rowIdx}-${colIdx}`}
+				class="board__peg"
+				style={`top: ${rowIdx * spacing + spacing}px; left: ${colIdx * spacing + spacing / 2.2 + ((maxCols - getColsForRow(rowIdx)) * spacing) / 2}px`}
+			></div>
 		{/each}
+	{/each} -->
+
+		<div class="board__peg board__peg--start"></div>
+		{#each pegs as peg}
+			<div
+				data-id={peg.label}
+				class="board__peg"
+				class:highlight={peg.highlighted}
+				style={`top: ${peg.y}px; left: ${peg.x}px;`}
+			></div>
+		{/each}
+
+		{#each allBalls as ball (ball.id)}
+			<div
+				class="board__ball transparent-animation"
+				style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%)`}
+			></div>
+		{/each}
+		<div class="board__multipliers">
+			{#each multipliers as multiplier, idx}
+				<div
+					class="board__multiplier"
+					class:jump={jumpingMultipliers[idx]}
+					style={`left: ${idx * spacing + spacing - 1}px; background: ${multipliersColors[idx]}; width: ${spacing * 0.97}px; box-shadow: ${multipliersShadows[idx]};`}
+				>
+					<span class="board__multiplier__text">{multiplier}</span>
+					<span class="board__multiplier__text">x</span>
+					<div class="bg-win" class:active={jumpingMultipliers[idx] && (idx < 3 || idx > 7)}></div>
+				</div>
+			{/each}
+		</div>
 	</div>
 
-	<!-- График -->
-
-	<div class="graph" bind:this={graphEl}>
-		<div class="graph-wrapper rotate" bind:this={graphWrapper}></div>
-		<!-- <svg viewBox="0 0 200 100" preserveAspectRatio="none">
-			<path d="M0,100 Q50,50 100,30 T200,0" fill="none" stroke="#0ff" stroke-width="2" />
-		</svg> -->
-		{#if multiplier > endMultiplier}
-			<span class="end-text">Полетів</span>
-		{/if}
-		<span class={multiplier > endMultiplier ? 'multiplier end-multiplier' : 'multiplier'}
-			>{multiplier.toFixed(2)}x</span
-		>
-		<svg
-			class={isFloating ? 'graph-animation trail' : 'trail'}
-			viewBox="0 0 270 220"
-			preserveAspectRatio="none"
-			bind:this={trailEl}
-		>
-			<g bind:this={trailGroup}>
-				<!-- Заливка -->
-				<path bind:this={trailFillPath} fill="#008BB6" opacity="0.3" />
-				<!-- Линия -->
-				<path
-					bind:this={trailStrokePath}
-					stroke="#0ABAF0"
-					stroke-width="3"
-					stroke-linecap="round"
-					fill="none"
-				/>
-			</g>
-		</svg>
-
-		<div class="plane">
-			<img
-				src="/images/aviator.png"
-				alt="plane"
-				bind:this={aviatorEl}
-				class={isFloating ? 'up-down' : ''}
-			/>
-		</div>
+	<div class="score">
+		Виграш {winSum.toFixed(2)} USDT
 	</div>
 
 	<div class="bets">
-		<div class="sum">
-			<div class="amount">
-				<button on:click={() => (amount = Math.max(0.1, amount - 0.1))}>-</button>
-				<span>{amount.toFixed(2)}</span>
-				<button on:click={() => (amount += 0.1)}>+</button>
-			</div>
-			<div class="quick">
-				{#each [1, 2, 5, 10] as val}
-					<button on:click={() => (amount = val)}>{val}</button>
-				{/each}
-			</div>
-		</div>
-		<button class="bet" on:click={startGame}>Ставка {amount.toFixed(2)} USDT</button>
+		<button class:disabled={betSum < 0.2} on:click={() => changeBet('minus')}
+			><img src="./images/minus-button.png" alt="minus button image" /></button
+		>
+		<button class="bets__button">Ставка: {betSum.toFixed(2)} USDT</button>
+		<button on:click={() => changeBet('plus')}
+			><img src="./images/plus-button.png" alt="plus button image" /></button
+		>
 	</div>
 
-	<button class="back">
-		<img src="/images/arrow.png" alt="arrow img" />
-		<span>Назад</span>
-	</button>
+	<!-- <div class="board__buttons">
+	<div class="board__difficulty">
+		<button class="board__difficulty__button" on:click={() => changeDifficulty('easy')}>Easy</button
+		>
+		<button class="board__difficulty__button" on:click={() => changeDifficulty('medium')}
+			>Medium</button
+		>
+		<button class="board__difficulty__button" on:click={() => changeDifficulty('hard')}>Hard</button
+		>
+	</div>
+	<button class="play-button" on:click={dropBall}
+		><img src="./images/button.png" alt="button icon" /></button
+	>
+</div> -->
+
+	<button class="play-button" on:click={dropBall}
+		><img src="./images/button.png" alt="button icon" /></button
+	>
 </div>
 
 <style>
-	.game-container {
-		background: #131313;
-		color: white;
-		font-family: sans-serif;
-		padding: 20px;
-		/* max-width: 400px; */
-		margin: auto;
-		min-height: 100vh;
+	.container {
 		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		padding: 0 10px;
+	}
+
+	.board {
+		position: relative;
+		width: calc(var(--maxCols) * var(--spacing));
+		height: calc(var(--rows) * var(--spacing) + var(--spacing));
+		margin: 0 auto;
+		margin-top: 150px;
+	}
+
+	.board__aside {
+		width: 80px;
+		height: 200px;
+		border: 1px solid #ffffff;
+		background: #00193e;
+		border-radius: 12px;
+		position: absolute;
+		z-index: 10;
+		top: -15%;
+		overflow: hidden;
+	}
+
+	.board__aside-coeff {
+		font-weight: 800;
+		font-size: 16px;
+		letter-spacing: 2%;
+		text-align: center;
+		-webkit-text-stroke: 0.5px solid #00000080;
+		/* background: linear-gradient(180deg, #ffd075 0%, #ffab05 100%); */
+		color: #ffffff;
+		height: 20%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.board__peg {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		width: calc(var(--spacing) / 2.5);
+		height: calc(var(--spacing) / 2.5);
+		background: #fff;
+		border-radius: 50%;
+	}
+
+	.board__peg--start {
+		background-color: #000000;
+		box-shadow: 0px 0px 14px 0px #ffffff40;
+		left: 50%;
+		top: -20px;
+		transform: translate(-50%, -50%);
+	}
+
+	.board__ball {
+		position: absolute;
+		width: calc(var(--spacing) / 2);
+		height: calc(var(--spacing) / 2);
+		background: url('./images/ball.png');
+		border-radius: 50%;
+		z-index: 10;
+	}
+
+	.board__buttons {
+		display: flex;
+		justify-content: center;
 		flex-direction: column;
 	}
 
-	.history {
+	.board__difficulty {
 		display: flex;
-		gap: 0.5rem;
-		overflow-x: auto;
-		margin-bottom: 1rem;
-		padding-bottom: 0.5rem;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
 	}
 
-	.history span {
-		background: #222;
-		padding: 0.3rem 0.6rem;
-		border-radius: 12px;
-		color: #00bfff;
-		font-weight: bold;
-		white-space: nowrap;
+	.board__difficulty__button {
+		padding: 10px 20px;
+		font-size: 20px;
+		background: #67b640;
+		color: #fff;
+		cursor: pointer;
+		border-radius: 10px;
+		width: 200px;
 	}
 
-	.history .highlight {
-		color: #f0f;
+	.score {
+		margin: 65px auto 0;
+		text-align: center;
+		background: url('./images/winBg.png');
+		height: 40px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		color: #fff;
+		font-size: 22px;
+		font-weight: 700;
+		border-radius: 8px;
+		width: 100%;
+		box-shadow: 0px 0px 10px 0px #fec801;
+		color: #433600;
 	}
 
-	.graph-wrapper {
+	.play-button {
+		display: block;
+		margin: 20px auto;
+		cursor: pointer;
+	}
+
+	.play-button:active {
+		filter: brightness(0.9);
+	}
+
+	.board__multipliers {
 		position: absolute;
-		top: -40%;
-		left: -150%;
-		width: 300%;
-		height: 300%;
-		background: url('/images/bg.png') repeat;
-		background-size: cover;
-		transform-origin: center center;
-		transform: rotate(0deg);
-		transition: transform 0.2s ease-out;
-		z-index: 0;
+		bottom: -10px;
+		width: 100%;
+		height: 20px;
 		pointer-events: none;
 	}
 
-	.graph {
-		/* background: radial-gradient(#111 0%, #000 100%); */
-		border-radius: 28px;
-		padding: 4px;
-		position: relative;
-		overflow: hidden;
-		min-height: 300px;
-	}
-
-	.trail {
-		width: 100%;
-		height: 300px;
+	.board__multiplier {
 		position: absolute;
-		top: 0;
-		left: 0;
-	}
-
-	.multiplier,
-	.end-text {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		font-size: 82px;
+		transform: translateX(-50%);
+		text-align: center;
 		font-weight: bold;
-		text-shadow: 0px 4px 72.7px #1276da;
-		z-index: 2;
+		color: #fff;
+		font-size: 13px;
+		font-weight: 800;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		border-radius: 5px;
 	}
 
-	.end-text {
-		top: 30%;
-		font-size: 26px;
-		font-weight: semibold;
+	.board__multiplier__text {
+		-webkit-text-stroke: 0.5px #00000080;
 	}
 
-	.end-multiplier {
-		color: #ff0000;
-	}
-
-	.plane {
+	.bg-win {
 		position: absolute;
-		bottom: -1%;
-		left: -4%;
-		width: 70px;
-		height: 60px;
+		left: 0%;
+		top: -170%;
+		transform: translateX(-50%);
+		width: 100%;
+		height: 100px;
+		pointer-events: none;
+		opacity: 0;
+		transform: rotate(180deg);
+		background: linear-gradient(180deg, rgba(255, 113, 82, 0.7) 0%, rgba(255, 113, 82, 0) 100%);
+		transition: opacity 0.2s ease;
+		z-index: -1;
+	}
+
+	.bg-win.active {
+		opacity: 1;
+		animation: bigWin 0.5s ease-out;
+	}
+
+	@keyframes bigWin {
+		0% {
+			transform: scaleY(0.7), rotate(180deg);
+			opacity: 0;
+		}
+		50% {
+			transform: scaleY(1.2), rotate(180deg);
+			opacity: 1;
+		}
+		100% {
+			transform: scaleY(1), rotate(180deg);
+			opacity: 0;
+		}
+	}
+
+	.board__peg.highlight {
+		box-shadow: 0px 0px 4px 0px #ff0073;
+		border: 2px solid #ff1b73b2;
+	}
+
+	@keyframes transparent {
+		0% {
+			opacity: 0;
+		}
+		100% {
+			opacity: 1;
+		}
+	}
+
+	.transparent-animation {
+		animation: transparent 0.2s ease-in-out;
+	}
+
+	.board__multiplier.jump {
+		animation: bounce 0.3s ease;
+	}
+
+	@keyframes bounce {
+		0% {
+			transform: translate(-50%, 0);
+		}
+		50% {
+			transform: translate(-50%, -10px);
+		}
+		100% {
+			transform: translate(-50%, 0);
+		}
 	}
 
 	.bets {
 		display: flex;
-		background-color: #212224;
-		border-radius: 28px;
-		gap: 12px;
-		padding: 18px;
-	}
-
-	.sum {
-		flex: 1 1 40%;
-	}
-
-	.amount {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		background-color: #191919;
-		border-radius: 40px;
-		gap: 20px;
-	}
-
-	.amount button {
-		font-size: 20px;
-		background-color: #3c3c3c;
-		padding: 7px 18px;
-		border-radius: 50%;
-	}
-
-	.quick {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-		margin-top: 8px;
-	}
-
-	.back {
-		background: #009fdd;
-		padding: 20px 50px;
-		border-radius: 12px;
-		font-size: 18px;
-		font-weight: bold;
-		border: none;
-		display: flex;
 		justify-content: center;
-		align-items: center;
-		margin-top: 80px;
+		gap: 6px;
+		margin-top: 15px;
 	}
 
-	.quick button {
-		padding: 8px 0;
+	.bets button {
+		cursor: pointer;
+	}
+
+	.bets__button {
+		background: #55b64233;
+		font-weight: 700;
 		font-size: 18px;
-		color: #b3b3b3;
-		background: #191919;
-		border: none;
-		border-radius: 40px;
-		flex: 1 1 45%;
+		letter-spacing: 2%;
+		text-align: center;
+		padding: 12px 16px;
+		color: #f0ffef;
 	}
 
-	.bet {
-		background: limegreen;
-		color: white;
-		padding: 1rem;
-		border-radius: 10px;
-		font-size: 1.2rem;
-		font-weight: bold;
-		border: none;
-		flex: 1 1 60%;
-	}
-
-	@keyframes rotate-circle {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
-	}
-
-	.graph-wrapper.rotate {
-		animation: rotate-circle 30s linear infinite;
-	}
-
-	@keyframes up-down {
-		0% {
-			top: 0;
-			left: 0;
-		}
-		50% {
-			top: 80px;
-			left: 20px;
-		}
-		100% {
-			top: 0;
-			left: 0;
-		}
-	}
-
-	.up-down {
-		animation: up-down 7s ease-in-out infinite;
-		position: relative;
-	}
-
-	@keyframes graph-shrink-up {
-		0% {
-			width: 100%;
-			height: 300px;
-			top: 0;
-		}
-		50% {
-			width: calc(100% + 40px);
-			height: 200px;
-			top: 100px;
-		}
-		100% {
-			width: 100%;
-			height: 300px;
-			top: 0;
-		}
-	}
-
-	.graph-animation {
-		left: 0;
-		animation: 7s graph-shrink-up 0.7s ease-out infinite;
+	.disabled {
+		pointer-events: none;
+		opacity: 0.5;
 	}
 </style>
