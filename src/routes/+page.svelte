@@ -5,18 +5,10 @@
 	let engine: Matter.Engine;
 	let renderFrame: number;
 
-	const multipliersEasy = [2, 1.5, 1.2, 1, 0.8, 1, 1.2, 1.5, 2];
-	const probabilitiesEasy = [
-		0.03, // 2x
-		0.06, // 1.5x
-		0.09, // 1.2x
-		0.12, // 1x
-		0.4, // 0.8x
-		0.12, // 1x
-		0.09, // 1.2x
-		0.06, // 1.5x
-		0.03 // 2x
-	];
+	// for counting rtp
+	let totalWins = 0;
+	let totalPlays = 0;
+	let averageMultiplier = 1;
 
 	const multipliersMedium = [75.5, 10, 3, 0.8, 0.3, 0.2, 0.3, 0.8, 3, 10, 75.5];
 	const multipliersColors = [
@@ -45,19 +37,64 @@
 		'0px 4px 0px 0px #B41006',
 		'0px 4px 0px 0px #B80721'
 	];
-	const probabilitiesMedium = [
-		0.001, // 75.5
-		0.005, // 10
-		0.03, // 3
-		0.114, // 0.8
-		0.16, // 0.3
-		0.38, // 0.2
-		0.16, // 0.3
-		0.114, // 0.8
-		0.03, // 3
-		0.005, // 10
-		0.001 // 75.5
-	];
+	let probabilitiesMedium;
+	if (averageMultiplier > 0.75 && averageMultiplier < 1.1) {
+		probabilitiesMedium = [
+			0.0015, // 75.5
+			0.015, // 10
+			0.03, // 3
+			0.1, // 0.8
+			0.1835, // 0.3
+			0.34, // 0.2
+			0.1935, // 0.3
+			0.1, // 0.8
+			0.03, // 3
+			0.015, // 10
+			0.0015 // 75.5
+		]; // 1.04446
+	} else if (averageMultiplier > 1.1) {
+		probabilitiesMedium = [
+			0.0015, // 75.5
+			0.015, // 10
+			0.03, // 3
+			0.09, // 0.8
+			0.1835, // 0.3
+			0.36, // 0.2
+			0.1935, // 0.3
+			0.09, // 0.8
+			0.03, // 3
+			0.015, // 10
+			0.0015 // 75.5
+		]; // 1.0326
+	} else if (averageMultiplier > 1.25) {
+		probabilitiesMedium = [
+			0.001, // 75.5
+			0.015, // 10
+			0.0305, // 3
+			0.08, // 0.8
+			0.1735, // 0.3
+			0.4, // 0.2
+			0.1735, // 0.3
+			0.08, // 0.8
+			0.0305, // 3
+			0.015, // 10
+			0.001 // 75.5
+		]; // 0.9461
+	} else {
+		probabilitiesMedium = [
+			0.001, // 75.5
+			0.02, // 10
+			0.04, // 3
+			0.104, // 0.8
+			0.16, // 0.3
+			0.36, // 0.2
+			0.16, // 0.3
+			0.104, // 0.8
+			0.04, // 3
+			0.02, // 10
+			0.001 // 75.5
+		]; // 1.1254
+	}
 
 	let historyColors: string[] = [];
 
@@ -72,6 +109,7 @@
 
 	let betSum = 1;
 	let winSum = 0;
+	let balance = 100;
 
 	console.log(probabilitiesMedium.reduce((acc, prob) => acc + prob, 0));
 
@@ -99,10 +137,6 @@
 	const spacing = 32; // important
 	const rows = maxCols - minCols + 1;
 
-	// for counting rtp
-	let totalWins = 0;
-	let totalPlays = 0;
-	let averageMultiplier = 0;
 	const slotCount = multipliers.length;
 	const slotWidth = spacing;
 
@@ -110,10 +144,10 @@
 
 	let jumpingMultipliers = Array(multipliers.length).fill(false);
 
-	let forceMultiplier = 0.00001;
+	let forceMultiplier = 0.00006;
 	let offsetX = 0;
 
-	let allBalls: { id: number; body: Matter.Body; targetX: number }[] = [];
+	let allBalls: { id: number; body: Matter.Body; targetX: number; bet: number }[] = [];
 	let nextBallId = 0;
 
 	function getColsForRow(row: number) {
@@ -143,7 +177,7 @@
 			const randomIdx = Math.floor(Math.random() * candidates.length);
 			console.log(candidates, randomIdx);
 			if (randomIdx === 1) {
-				forceMultiplier = 0.00002;
+				// forceMultiplier = 0.00003;
 				offsetX = Math.random() * spacing * 0.1;
 			} else {
 				offsetX = -1 * Math.random() * spacing * 0.1;
@@ -161,95 +195,124 @@
 	function dropBall() {
 		const targetIndex = chooseTargetIndex();
 		const startY = -20;
-		const ballRadius = spacing / 2 / 1.6;
+		const ballRadius = spacing / 2 / 1.7;
 
-		const center = Math.floor(maxCols / 2);
+		if (targetIndex === 1) {
+			offsetX = -Math.floor(Math.random() * 3) - 4;
+			forceMultiplier = 0.000075;
+		} else if (targetIndex === 0) {
+			offsetX = -2;
+			forceMultiplier = 0.00003;
+		} else if (targetIndex === maxCols - 3) {
+			offsetX = Math.floor(Math.random() * 3) + 4;
+			forceMultiplier = 0.000075;
+		} else if (targetIndex === maxCols - 2) {
+			offsetX = 2;
+			forceMultiplier = 0.00005;
+		}
+
+		const center = Math.ceil(maxCols / 2);
 		const startX = center * spacing + offsetX;
-		// const startX = center * spacing;
 
-		const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
-			// label: 'ball',
-			// restitution: 0.9,
-			// density: 0.06,
-			// friction: 0.2,
-			// frictionAir: 0.25,
-			// collisionFilter: {
-			// 	group: -1
-			// }
-			restitution: 0.1, // тоже упругий
-			density: 0.06,
-			friction: 0.2,
-			frictionAir: 0.1,
-			collisionFilter: {
-				group: -1
-			},
-			label: 'ball'
-		});
-
-		const targetX =
+		let targetX =
 			targetIndex < center
-				? targetIndex * spacing + spacing / 2
-				: (targetIndex + 1) * spacing + spacing / 2;
+				? targetIndex * spacing + spacing / 2.5
+				: targetIndex > center
+					? (targetIndex + 1) * spacing + spacing / 2
+					: targetIndex * spacing + spacing / 2;
 
-		Matter.World.add(engine.world, newBall);
-		allBalls = [...allBalls, { id: nextBallId++, body: newBall, targetX }];
+		if (targetIndex === 1) {
+			targetX = targetIndex * spacing + spacing * 1.3;
+		} else if (targetIndex === 0) {
+			targetX = targetIndex * spacing - spacing * 0.95;
+		} else if (targetIndex === maxCols - 3) {
+			targetX = targetIndex * spacing + spacing * 0.69;
+		} else if (targetIndex === maxCols - 2) {
+			targetX = targetIndex * spacing + spacing * 1.2;
+			console.log('targetX', targetX);
+		}
 
-		setTimeout(() => {
-			let localForce = forceMultiplier;
-			const forceInterval = setInterval(() => {
-				localForce = Math.min(forceMultiplier, localForce + 0.000001);
-			}, 30);
+		// 1. Добавим "виртуальный" шар
+		const thisId = nextBallId++;
+		allBalls = [...allBalls, { id: thisId, body: null, targetX, bet: betSum }];
+		balance -= betSum;
 
-			const attractor = () => {
-				if (newBall.position.y < (rows - 1) * spacing) {
-					const dy = newBall.position.y;
-					const time = performance.now() / 1000;
+		// 2. Через кадр создаём физику
+		requestAnimationFrame(() => {
+			const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
+				restitution: 0.01,
+				density: 0.1,
+				friction: 0.2,
+				frictionAir: 0.22,
+				collisionFilter: { group: -1 },
+				label: 'ball'
+			});
 
-					if (!newBall['intermediateTargetX']) {
-						const range = spacing * 6;
-						newBall['intermediateTargetX'] =
-							newBall.position.x + (Math.random() * range - range / 2);
-					}
-					const intermediateX = newBall['intermediateTargetX'];
+			Matter.World.add(engine.world, newBall);
 
-					// Прогресс — на сколько глубоко шарик прошёл
-					const progress = Math.min(dy / ((rows - 1) * spacing), 1);
+			// 3. Заменим временный null на реальное тело
+			allBalls = allBalls.map((ball) => (ball.id === thisId ? { ...ball, body: newBall } : ball));
 
-					// Более "плавное" приближение: easeInOut
-					const smoothProgress = 0.5 * (1 - Math.cos(Math.PI * progress));
-
-					const dynamicTargetX = intermediateX + (targetX - intermediateX) * smoothProgress;
-
-					const dx = dynamicTargetX - newBall.position.x;
-					const dxNorm = Math.min(Math.abs(dx) / spacing, 1.5);
-
-					// Уменьшаем дрожание
-					const oscillation = Math.sin(time * 2.5 + newBall.id) * 0.08;
-
-					// Новый коэффициент притяжения
-					const magnetBoost = 1 + 2.2 * smoothProgress + 1.2 * dxNorm;
-
-					// Более мягкое усиление на краях
-					const centerIndex = (slotCount - 1) / 2;
-					const edgeBias = 1 + Math.pow(Math.abs(targetIndex - centerIndex), 1.1) * 0.08;
-
-					const forceX = (dx + oscillation * spacing) * localForce * magnetBoost * edgeBias;
-
-					Matter.Body.applyForce(newBall, newBall.position, { x: forceX, y: 0 });
-				} else {
-					Matter.Events.off(engine, 'beforeUpdate', attractor);
-					clearInterval(forceInterval);
-				}
-			};
-
+			// 4. Притяжение (как было у тебя)
 			setTimeout(() => {
-				Matter.Events.on(engine, 'beforeUpdate', attractor);
-			}, 70);
+				let localForce = 0;
+				const forceInterval = setInterval(() => {
+					localForce = Math.min(forceMultiplier, localForce + 0.00003);
+				}, 30);
 
-			if (!renderFrame) {
-				update();
-			}
-		}, 700);
+				const attractor = () => {
+					if (newBall.position.y < (rows - 1) * spacing) {
+						const dy = newBall.position.y;
+						const time = performance.now() / 1000;
+
+						if (!newBall['intermediateTargetX']) {
+							let range;
+							if (
+								targetIndex !== 1 &&
+								targetIndex !== 0 &&
+								targetIndex !== maxCols - 2 &&
+								targetIndex !== maxCols - 3
+							) {
+								range = spacing * 3;
+							} else if (targetIndex === maxCols - 3 || targetIndex === 1) {
+								range = spacing * 1.5;
+							} else {
+								range = spacing * 0.5;
+							}
+							newBall['intermediateTargetX'] =
+								newBall.position.x + (Math.random() * range - range / 2);
+						}
+						const intermediateX = newBall['intermediateTargetX'];
+
+						const progress = Math.min(dy / ((rows - 1) * spacing), 1);
+						const smoothProgress = 0.5 * (1 - Math.cos(Math.PI * progress));
+						const dynamicTargetX = intermediateX + (targetX - intermediateX) * smoothProgress;
+
+						const dx = dynamicTargetX - newBall.position.x;
+						const dxNorm = Math.min(Math.abs(dx) / spacing, 1.5);
+						const oscillation = Math.sin(time * 2.5 + newBall.id) * 0.08;
+						const magnetBoost = 1 + 2.2 * smoothProgress + 1.2 * dxNorm;
+						const centerIndex = (slotCount - 1) / 2;
+						const edgeBias = 1 + Math.pow(Math.abs(targetIndex - centerIndex), 1.1) * 0.08;
+
+						const forceX = (dx + oscillation * spacing) * localForce * magnetBoost * edgeBias;
+						Matter.Body.applyForce(newBall, newBall.position, { x: forceX, y: 0 });
+					} else {
+						Matter.Events.off(engine, 'beforeUpdate', attractor);
+						clearInterval(forceInterval);
+					}
+				};
+
+				setTimeout(() => {
+					Matter.Events.on(engine, 'beforeUpdate', attractor);
+				}, 70);
+
+				// 5. Только если update() не запущен — запускаем его
+				if (!renderFrame) {
+					update();
+				}
+			}, 700);
+		});
 	}
 
 	function update() {
@@ -257,6 +320,9 @@
 
 		for (let i = allBalls.length - 1; i >= 0; i--) {
 			const ball = allBalls[i];
+
+			if (!ball.body) continue;
+
 			const { x, y } = ball.body.position;
 
 			if (y > (rows + 0.65) * spacing) {
@@ -264,7 +330,9 @@
 				const finalIndex = Math.min(slotCount - 1, Math.max(0, Math.floor((x - 3) / slotWidth)));
 				// console.log('finalIndex', finalIndex);
 				totalWins += multipliers[finalIndex];
-				winSum = betSum * multipliers[finalIndex];
+				const bet = ball.bet ?? 1;
+				winSum = bet * multipliers[finalIndex];
+				balance += winSum;
 				totalPlays += 1;
 				averageMultiplier = +(totalWins / totalPlays).toFixed(3);
 				pegs = pegs.map((p) => ({ ...p, highlighted: false }));
@@ -306,24 +374,24 @@
 		}
 	}
 
-	function changeDifficulty(difficulty: 'easy' | 'medium' | 'hard') {
-		switch (difficulty) {
-			case 'easy':
-				multipliers = multipliersEasy;
-				probabilities = probabilitiesEasy;
-				break;
-			case 'medium':
-				multipliers = multipliersMedium;
-				probabilities = probabilitiesMedium;
-				break;
-			case 'hard':
-				multipliers = multipliersHard;
-				probabilities = probabilitiesHard;
-				break;
-			default:
-				multipliers = multipliersMedium;
-		}
-	}
+	// function changeDifficulty(difficulty: 'easy' | 'medium' | 'hard') {
+	// 	switch (difficulty) {
+	// 		case 'easy':
+	// 			multipliers = multipliersEasy;
+	// 			probabilities = probabilitiesEasy;
+	// 			break;
+	// 		case 'medium':
+	// 			multipliers = multipliersMedium;
+	// 			probabilities = probabilitiesMedium;
+	// 			break;
+	// 		case 'hard':
+	// 			multipliers = multipliersHard;
+	// 			probabilities = probabilitiesHard;
+	// 			break;
+	// 		default:
+	// 			multipliers = multipliersMedium;
+	// 	}
+	// }
 
 	let pegs: { label: string; x: number; y: number; highlighted: boolean }[] = [];
 
@@ -340,7 +408,7 @@
 	onMount(() => {
 		engine = Matter.Engine.create();
 
-		const pegRadius = spacing / 5;
+		const pegRadius = spacing / 4.9;
 
 		pegs.forEach(({ x, y, label }) => {
 			const pegBody = Matter.Bodies.circle(x, y, pegRadius, {
@@ -348,7 +416,7 @@
 				restitution: 1, // Упругость — 1.0 = идеально упругое тело
 				friction: 0.1,
 				frictionAir: 0.001,
-				label: 'peg'
+				label
 			});
 			Matter.World.add(engine.world, pegBody);
 		});
@@ -393,6 +461,14 @@
 			{/each}
 		</aside>
 
+		<div class="board__balance">
+			<img src="./images/usdt.png" alt="usdt image" />
+			<div class="board__balance__content">
+				<span class="board__balance__usdt">USDT</span>
+				<span class="board__balance__amount">{balance.toFixed(2)}</span>
+			</div>
+		</div>
+
 		<!-- {#each Array(rows) as _, rowIdx}
 		{#each Array(getColsForRow(rowIdx)) as _, colIdx}
 			<div
@@ -414,10 +490,14 @@
 		{/each}
 
 		{#each allBalls as ball (ball.id)}
-			<div
-				class="board__ball transparent-animation"
-				style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%)`}
-			></div>
+			{#if ball.body}
+				<div
+					class="board__ball transparent-animation"
+					style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%)`}
+				></div>
+			{:else}
+				<div class="board__ball transparent-animation"></div>
+			{/if}
 		{/each}
 		<div class="board__multipliers">
 			{#each multipliers as multiplier, idx}
@@ -509,6 +589,49 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
+	}
+
+	.board__balance {
+		width: 150px;
+		/* height: 50px; */
+		position: absolute;
+		z-index: 10;
+		top: -20%;
+		right: -2%;
+		background: #021502;
+		border: 1px solid #0b4b16;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		border-top-left-radius: 40px;
+		border-bottom-left-radius: 40px;
+		padding: 8px 30px;
+		gap: 5px;
+		/* border-radius: 12px;
+		font-weight: 800;
+		font-size: 16px;
+		letter-spacing: 2%;
+		text-align: center;
+		-webkit-text-stroke: 0.5px solid #00000080; */
+	}
+
+	.board__balance__content {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: flex-start;
+	}
+
+	.board__balance__usdt {
+		font-size: 12px;
+		letter-spacing: -1%;
+		color: #ababab;
+	}
+
+	.board__balance__amount {
+		font-size: 15px;
+		letter-spacing: -1%;
+		color: #ffffff;
 	}
 
 	.board__peg {
@@ -656,7 +779,7 @@
 		border: 2px solid #ff1b73b2;
 	}
 
-	@keyframes transparent {
+	@keyframes appearing {
 		0% {
 			opacity: 0;
 			top: -10px;
@@ -668,7 +791,7 @@
 	}
 
 	.transparent-animation {
-		animation: 0.5s transparent ease-in-out;
+		animation: 0.5s appearing ease-in-out;
 	}
 
 	.board__multiplier.jump {
@@ -699,7 +822,7 @@
 	}
 
 	.bets__button {
-		background: #55b64233;
+		background: url('./images/betBg.png') center center no-repeat;
 		font-weight: 700;
 		font-size: 18px;
 		letter-spacing: 2%;
