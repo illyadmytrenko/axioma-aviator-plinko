@@ -597,7 +597,7 @@
 		position: absolute;
 		z-index: 10;
 		top: -20%;
-		right: -2%;
+		right: -10px;
 		background: #021502;
 		border: 1px solid #0b4b16;
 		display: flex;
