@@ -2,15 +2,22 @@
 	import { onMount } from 'svelte';
 	import Matter from 'matter-js';
 
+	// physics
 	let engine: Matter.Engine;
 	let renderFrame: number;
+
+	let forceMultiplier = 0.00006;
+	let offsetX = 0;
+
+	let allBalls: { id: number; body: Matter.Body; targetX: number; bet: number }[] = [];
+	let nextBallId = 0;
 
 	// for counting rtp
 	let totalWins = 0;
 	let totalPlays = 0;
 	let averageMultiplier = 1;
 
-	const multipliersMedium = [75.5, 10, 3, 0.8, 0.3, 0.2, 0.3, 0.8, 3, 10, 75.5];
+	const multipliers = [75.5, 10, 3, 0.8, 0.3, 0.2, 0.3, 0.8, 3, 10, 75.5];
 	const multipliersColors = [
 		'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)',
 		'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
@@ -37,9 +44,9 @@
 		'0px 4px 0px 0px #B41006',
 		'0px 4px 0px 0px #B80721'
 	];
-	let probabilitiesMedium;
+	let probabilities;
 	if (averageMultiplier > 0.75 && averageMultiplier < 1.1) {
-		probabilitiesMedium = [
+		probabilities = [
 			0.0015, // 75.5
 			0.015, // 10
 			0.03, // 3
@@ -53,21 +60,21 @@
 			0.0015 // 75.5
 		]; // 1.04446
 	} else if (averageMultiplier > 1.1) {
-		probabilitiesMedium = [
+		probabilities = [
 			0.0015, // 75.5
 			0.015, // 10
 			0.03, // 3
 			0.09, // 0.8
 			0.1835, // 0.3
-			0.36, // 0.2
-			0.1935, // 0.3
+			0.35, // 0.2
+			0.1835, // 0.3
 			0.09, // 0.8
 			0.03, // 3
 			0.015, // 10
 			0.0015 // 75.5
 		]; // 1.0326
 	} else if (averageMultiplier > 1.25) {
-		probabilitiesMedium = [
+		probabilities = [
 			0.001, // 75.5
 			0.015, // 10
 			0.0305, // 3
@@ -81,7 +88,7 @@
 			0.001 // 75.5
 		]; // 0.9461
 	} else {
-		probabilitiesMedium = [
+		probabilities = [
 			0.001, // 75.5
 			0.02, // 10
 			0.04, // 3
@@ -107,31 +114,12 @@
 		return 'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)';
 	});
 
+	// money
 	let betSum = 1;
 	let winSum = 0;
 	let balance = 100;
 
-	console.log(probabilitiesMedium.reduce((acc, prob) => acc + prob, 0));
-
-	const rtp = multipliersMedium.reduce((acc, mult, i) => acc + mult * probabilitiesMedium[i], 0);
-	console.log('RTP:', rtp);
-
-	const multipliersHard = [100, 10, 5, 2, 0, 2, 5, 10, 100];
-	const probabilitiesHard = [
-		0.005, // 100x
-		0.01, // 10x
-		0.025, // 5x
-		0.05, // 2x
-		0.82, // 0x
-		0.05, // 2x
-		0.025, // 5x
-		0.01, // 10x
-		0.005 // 100x
-	]; // сумма = 1.0
-
-	let multipliers = multipliersMedium;
-	let probabilities = probabilitiesMedium;
-
+	//board
 	const minCols = 3;
 	const maxCols = 12;
 	const spacing = 32; // important
@@ -144,11 +132,18 @@
 
 	let jumpingMultipliers = Array(multipliers.length).fill(false);
 
-	let forceMultiplier = 0.00006;
-	let offsetX = 0;
+	// pegs
+	let pegs: { label: string; x: number; y: number; highlighted: boolean }[] = [];
 
-	let allBalls: { id: number; body: Matter.Body; targetX: number; bet: number }[] = [];
-	let nextBallId = 0;
+	for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
+		const cols = getColsForRow(rowIdx);
+		for (let colIdx = 0; colIdx < cols; colIdx++) {
+			const x = colIdx * spacing + spacing / 2.2 + ((maxCols - cols) * spacing) / 2;
+			const y = rowIdx * spacing + spacing;
+			const label = `peg-${rowIdx}-${colIdx}`;
+			pegs.push({ label, x, y, highlighted: false });
+		}
+	}
 
 	function getColsForRow(row: number) {
 		return Math.min(minCols + row, maxCols);
@@ -164,7 +159,6 @@
 		for (let i = 0; i < probabilities.length; i++) {
 			acc += probabilities[i];
 			if (r <= acc) {
-				// Найдём все индексы с такой же вероятностью
 				candidateProb = probabilities[i];
 				candidates = probabilities
 					.map((p, idx) => (p === candidateProb ? idx : -1))
@@ -232,12 +226,12 @@
 			console.log('targetX', targetX);
 		}
 
-		// 1. Добавим "виртуальный" шар
+		// virtual ball
 		const thisId = nextBallId++;
 		allBalls = [...allBalls, { id: thisId, body: null, targetX, bet: betSum }];
 		balance -= betSum;
 
-		// 2. Через кадр создаём физику
+		// make physicics
 		requestAnimationFrame(() => {
 			const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
 				restitution: 0.01,
@@ -250,10 +244,10 @@
 
 			Matter.World.add(engine.world, newBall);
 
-			// 3. Заменим временный null на реальное тело
+			// create real ball
 			allBalls = allBalls.map((ball) => (ball.id === thisId ? { ...ball, body: newBall } : ball));
 
-			// 4. Притяжение (как было у тебя)
+			// magnet
 			setTimeout(() => {
 				let localForce = 0;
 				const forceInterval = setInterval(() => {
@@ -307,7 +301,6 @@
 					Matter.Events.on(engine, 'beforeUpdate', attractor);
 				}, 70);
 
-				// 5. Только если update() не запущен — запускаем его
 				if (!renderFrame) {
 					update();
 				}
@@ -326,9 +319,7 @@
 			const { x, y } = ball.body.position;
 
 			if (y > (rows + 0.65) * spacing) {
-				// console.log(x, slotWidth);
 				const finalIndex = Math.min(slotCount - 1, Math.max(0, Math.floor((x - 3) / slotWidth)));
-				// console.log('finalIndex', finalIndex);
 				totalWins += multipliers[finalIndex];
 				const bet = ball.bet ?? 1;
 				winSum = bet * multipliers[finalIndex];
@@ -374,34 +365,13 @@
 		}
 	}
 
-	// function changeDifficulty(difficulty: 'easy' | 'medium' | 'hard') {
-	// 	switch (difficulty) {
-	// 		case 'easy':
-	// 			multipliers = multipliersEasy;
-	// 			probabilities = probabilitiesEasy;
-	// 			break;
-	// 		case 'medium':
-	// 			multipliers = multipliersMedium;
-	// 			probabilities = probabilitiesMedium;
-	// 			break;
-	// 		case 'hard':
-	// 			multipliers = multipliersHard;
-	// 			probabilities = probabilitiesHard;
-	// 			break;
-	// 		default:
-	// 			multipliers = multipliersMedium;
-	// 	}
-	// }
-
-	let pegs: { label: string; x: number; y: number; highlighted: boolean }[] = [];
-
-	for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
-		const cols = getColsForRow(rowIdx);
-		for (let colIdx = 0; colIdx < cols; colIdx++) {
-			const x = colIdx * spacing + spacing / 2.2 + ((maxCols - cols) * spacing) / 2;
-			const y = rowIdx * spacing + spacing;
-			const label = `peg-${rowIdx}-${colIdx}`;
-			pegs.push({ label, x, y, highlighted: false });
+	function changeBet(operation: string) {
+		if (operation === 'minus') {
+			if (betSum >= 0.2) {
+				betSum -= 0.1;
+			}
+		} else {
+			betSum += 0.1;
 		}
 	}
 
@@ -436,16 +406,6 @@
 			}
 		});
 	});
-
-	function changeBet(operation: string) {
-		if (operation === 'minus') {
-			if (betSum >= 0.2) {
-				betSum -= 0.1;
-			}
-		} else {
-			betSum += 0.1;
-		}
-	}
 </script>
 
 <div class="container">
@@ -469,16 +429,6 @@
 			</div>
 		</div>
 
-		<!-- {#each Array(rows) as _, rowIdx}
-		{#each Array(getColsForRow(rowIdx)) as _, colIdx}
-			<div
-				data-id={`peg-${rowIdx}-${colIdx}`}
-				class="board__peg"
-				style={`top: ${rowIdx * spacing + spacing}px; left: ${colIdx * spacing + spacing / 2.2 + ((maxCols - getColsForRow(rowIdx)) * spacing) / 2}px`}
-			></div>
-		{/each}
-	{/each} -->
-
 		<div class="board__peg board__peg--start"></div>
 		{#each pegs as peg}
 			<div
@@ -499,6 +449,7 @@
 				<div class="board__ball transparent-animation"></div>
 			{/if}
 		{/each}
+
 		<div class="board__multipliers">
 			{#each multipliers as multiplier, idx}
 				<div
@@ -527,21 +478,6 @@
 			><img src="./images/plus-button.png" alt="plus button image" /></button
 		>
 	</div>
-
-	<!-- <div class="board__buttons">
-	<div class="board__difficulty">
-		<button class="board__difficulty__button" on:click={() => changeDifficulty('easy')}>Easy</button
-		>
-		<button class="board__difficulty__button" on:click={() => changeDifficulty('medium')}
-			>Medium</button
-		>
-		<button class="board__difficulty__button" on:click={() => changeDifficulty('hard')}>Hard</button
-		>
-	</div>
-	<button class="play-button" on:click={dropBall}
-		><img src="./images/button.png" alt="button icon" /></button
-	>
-</div> -->
 
 	<button class="play-button" on:click={dropBall}
 		><img src="./images/button.png" alt="button icon" /></button
