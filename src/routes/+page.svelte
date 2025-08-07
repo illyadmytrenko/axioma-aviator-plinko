@@ -46,7 +46,7 @@
 			0.1, // 0.8
 			0.1835, // 0.3
 			0.34, // 0.2
-			0.1935, // 0.3
+			0.1835, // 0.3
 			0.1, // 0.8
 			0.03, // 3
 			0.015, // 10
@@ -114,7 +114,7 @@
 	console.log(probabilitiesMedium.reduce((acc, prob) => acc + prob, 0));
 
 	const rtp = multipliersMedium.reduce((acc, mult, i) => acc + mult * probabilitiesMedium[i], 0);
-	console.log('RTP:', rtp); // ~0.98
+	console.log('RTP:', rtp);
 
 	const multipliersHard = [100, 10, 5, 2, 0, 2, 5, 10, 100];
 	const probabilitiesHard = [
@@ -178,12 +178,12 @@
 			console.log(candidates, randomIdx);
 			if (randomIdx === 1) {
 				// forceMultiplier = 0.00003;
-				offsetX = Math.random() * spacing * 0.1;
+				offsetX = Math.random() * spacing * 0.2;
 			} else {
-				offsetX = -1 * Math.random() * spacing * 0.1;
+				offsetX = -1 * Math.random() * spacing * 0.2;
 			}
 			if (candidates.length === 1) {
-				offsetX = Math.random() * spacing * 0.1 - spacing * 0.05;
+				offsetX = Math.random() * spacing * 0.2 - spacing * 0.1;
 			}
 			return candidates[randomIdx];
 		}
@@ -555,6 +555,9 @@
 		justify-content: center;
 		align-items: center;
 		padding: 0 10px;
+		overflow: hidden;
+		width: 100%;
+		height: 100%;
 	}
 
 	.board {
@@ -597,7 +600,7 @@
 		position: absolute;
 		z-index: 10;
 		top: -20%;
-		right: -10px;
+		right: -20px;
 		background: #021502;
 		border: 1px solid #0b4b16;
 		display: flex;
