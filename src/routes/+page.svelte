@@ -8,8 +8,10 @@
 
 	let forceMultiplier = 0.00006;
 	let offsetX = 0;
+	const startY = -20;
 
-	let allBalls: { id: number; body: Matter.Body; targetX: number; bet: number }[] = [];
+	let allBalls: { id: number; body: Matter.Body; targetX: number; startX: number; bet: number }[] =
+		[];
 	let nextBallId = 0;
 
 	// for counting rtp
@@ -149,7 +151,18 @@
 	//board
 	const minCols = 3;
 	const maxCols = 12;
-	const spacing = 32; // important
+	let spacing = 32;
+	let asideLeft = 0;
+	if (typeof window !== 'undefined') {
+		if (window.innerWidth < 400) {
+			spacing = 28;
+			asideLeft = 10;
+		}
+		if (window.innerWidth < 350) {
+			spacing = 24;
+			asideLeft = 15;
+		}
+	}
 	const rows = maxCols - minCols + 1;
 
 	const slotCount = multipliers.length;
@@ -218,7 +231,6 @@
 
 	function dropBall() {
 		const targetIndex = chooseTargetIndex();
-		const startY = -20;
 		const ballRadius = spacing / 2 / 1.7;
 
 		console.log(rows);
@@ -274,27 +286,28 @@
 
 		// virtual ball
 		const thisId = nextBallId++;
-		allBalls = [...allBalls, { id: thisId, body: null, targetX, bet: betSum }];
+		allBalls = [...allBalls, { id: thisId, body: null, targetX, startX: startX, bet: betSum }];
 		balance -= betSum;
 
 		// make physicics
-		requestAnimationFrame(() => {
-			const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
-				restitution: 0.01,
-				density: 0.1,
-				friction: 0.2,
-				frictionAir: 0.22,
-				collisionFilter: { group: -1 },
-				label: 'ball'
-			});
+		setTimeout(() => {
+			requestAnimationFrame(() => {
+				const newBall = Matter.Bodies.circle(startX, startY, ballRadius, {
+					restitution: 0.01,
+					density: 0.1,
+					friction: 0.2,
+					frictionAir: 0.22,
+					collisionFilter: { group: -1 },
+					label: 'ball'
+				});
 
-			Matter.World.add(engine.world, newBall);
+				Matter.World.add(engine.world, newBall);
 
-			// create real ball
-			allBalls = allBalls.map((ball) => (ball.id === thisId ? { ...ball, body: newBall } : ball));
+				// create real ball
+				allBalls = allBalls.map((ball) => (ball.id === thisId ? { ...ball, body: newBall } : ball));
 
-			// magnet
-			setTimeout(() => {
+				// magnet
+
 				let localForce = 0;
 				const forceInterval = setInterval(() => {
 					localForce = Math.min(forceMultiplier, localForce + 0.00003);
@@ -347,11 +360,11 @@
 					Matter.Events.on(engine, 'beforeUpdate', attractor);
 				}, 70);
 
-				if (!renderFrame) {
-					update();
-				}
-			}, 700);
-		});
+				// if (!renderFrame) {
+				// 	update();
+				// }
+			});
+		}, DELAY_BEFORE_DROP);
 	}
 
 	function update() {
@@ -360,7 +373,10 @@
 		for (let i = allBalls.length - 1; i >= 0; i--) {
 			const ball = allBalls[i];
 
-			if (!ball.body) continue;
+			if (!ball.body) {
+				console.log(ball);
+				continue;
+			} // ждём появления физики
 
 			const { x, y } = ball.body.position;
 
@@ -388,19 +404,11 @@
 					lastFiveWinCoeffs.shift();
 				}
 				lastFiveWinCoeffs = [...lastFiveWinCoeffs];
-
-				console.log(totalWins, totalPlays, averageMultiplier);
 			}
 		}
 
 		allBalls = [...allBalls];
-
-		if (allBalls.length > 0) {
-			renderFrame = requestAnimationFrame(update);
-		} else {
-			cancelAnimationFrame(renderFrame);
-			renderFrame = null;
-		}
+		requestAnimationFrame(update);
 	}
 
 	function highlightPeg(label: string) {
@@ -425,6 +433,7 @@
 
 	onMount(() => {
 		engine = Matter.Engine.create();
+		update();
 
 		const pegRadius = spacing / 4.9;
 
@@ -458,7 +467,7 @@
 
 <div class="container">
 	<div class="board" style={`--rows: ${rows}; --spacing: ${spacing}px; --maxCols: ${maxCols};`}>
-		<aside class="board__aside">
+		<aside class="board__aside" style={`--asideLeft: ${asideLeft};`}>
 			{#each lastFiveWinCoeffs.slice().reverse() as coeff}
 				<div
 					class="board__aside--coeff"
@@ -489,12 +498,17 @@
 
 		{#each allBalls as ball (ball.id)}
 			{#if ball.body}
+				<!-- Шар под физикой -->
 				<div
-					class="board__ball transparent-animation"
-					style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%); --transparentTiming: ${TRANSPARENT_ANIMATION_DURATION}ms;`}
+					class="board__ball"
+					style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%)`}
 				></div>
 			{:else}
-				<div class="board__ball transparent-animation"></div>
+				<!-- Виртуальный шар с анимацией -->
+				<div
+					class="board__ball transparent-animation"
+					style={`transform: translate(${ball.startX}px, ${startY}px) translate(-50%, -50%); --timer: ${TRANSPARENT_ANIMATION_DURATION}ms;`}
+				></div>
 			{/if}
 		{/each}
 
@@ -555,7 +569,8 @@
 	.board__aside {
 		position: absolute;
 		z-index: 10;
-		top: -15%;
+		top: -20%;
+		left: calc(var(--asideLeft) * 1px * -1);
 		width: 80px;
 		height: 200px;
 		overflow: hidden;
@@ -581,7 +596,7 @@
 		position: absolute;
 		z-index: 10;
 		top: -20%;
-		right: -20px;
+		right: -30px;
 		display: flex;
 		justify-content: center;
 		align-items: center;
@@ -764,7 +779,7 @@
 	}
 
 	.transparent-animation {
-		animation: var(--transparentTiming) appearing ease-in-out;
+		animation: appearing var(--timer) ease-in-out;
 	}
 
 	@keyframes appearing {
