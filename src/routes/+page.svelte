@@ -18,32 +18,59 @@
 	let averageMultiplier = 1;
 
 	const multipliers = [75.5, 10, 3, 0.8, 0.3, 0.2, 0.3, 0.8, 3, 10, 75.5];
+
+	const pinkCell = {
+		color: 'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)',
+		shadow: '0px 4px 0px 0px #B80721'
+	};
+	const redCell = {
+		color: 'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
+		shadow: '0px 4px 0px 0px #B41006'
+	};
+	const darkOrangeCell = {
+		color: 'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)',
+		shadow: '0px 4px 0px 0px #BF2A08'
+	};
+	const orangeCell = {
+		color: 'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)',
+		shadow: '0px 4px 0px 0px #BA360D'
+	};
+	const lightOrangeCell = {
+		color: 'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)',
+		shadow: '0px 4px 0px 0px #BA530F'
+	};
+	const yellowCell = {
+		color: 'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)',
+		shadow: '0px 4px 0px 0px #A97713'
+	};
+
 	const multipliersColors = [
-		'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)',
-		'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
-		'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)',
-		'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)',
-		'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)',
-		'linear-gradient(180deg, #FFD075 0%, #FFAB05 100%)',
-		'linear-gradient(180deg, #FFB575 0%, #FF6905 100%)',
-		'linear-gradient(180deg, #FFA875 0%, #FF3F05 100%)',
-		'linear-gradient(180deg, #FF8C75 0%, #FF3305 100%)',
-		'linear-gradient(180deg, #FF8175 0%, #FF1205 100%)',
-		'linear-gradient(180deg, #FF7587 0%, #FF052B 100%)'
+		pinkCell.color,
+		redCell.color,
+		darkOrangeCell.color,
+		orangeCell.color,
+		lightOrangeCell.color,
+		yellowCell.color,
+		lightOrangeCell.color,
+		orangeCell.color,
+		darkOrangeCell.color,
+		redCell.color,
+		pinkCell.color
 	];
 	const multipliersShadows = [
-		'0px 4px 0px 0px #B80721',
-		'0px 4px 0px 0px #B41006',
-		'0px 4px 0px 0px #BF2A08',
-		'0px 4px 0px 0px #BA360D',
-		'0px 4px 0px 0px #BA530F',
-		'0px 4px 0px 0px #A97713',
-		'0px 4px 0px 0px #BA530F',
-		'0px 4px 0px 0px #BA360D',
-		'0px 4px 0px 0px #BF2A08',
-		'0px 4px 0px 0px #B41006',
-		'0px 4px 0px 0px #B80721'
+		pinkCell.shadow,
+		redCell.shadow,
+		darkOrangeCell.shadow,
+		orangeCell.shadow,
+		lightOrangeCell.shadow,
+		yellowCell.shadow,
+		lightOrangeCell.shadow,
+		orangeCell.shadow,
+		darkOrangeCell.shadow,
+		redCell.shadow,
+		pinkCell.shadow
 	];
+
 	let probabilities;
 	if (averageMultiplier > 0.75 && averageMultiplier < 1.1) {
 		probabilities = [
@@ -132,6 +159,9 @@
 
 	let jumpingMultipliers = Array(multipliers.length).fill(false);
 
+	const TRANSPARENT_ANIMATION_DURATION = 500;
+	const DELAY_BEFORE_DROP = TRANSPARENT_ANIMATION_DURATION + 200;
+
 	// pegs
 	let pegs: { label: string; x: number; y: number; highlighted: boolean }[] = [];
 
@@ -191,39 +221,55 @@
 		const startY = -20;
 		const ballRadius = spacing / 2 / 1.7;
 
-		if (targetIndex === 1) {
-			offsetX = -Math.floor(Math.random() * 3) - 4;
-			forceMultiplier = 0.000075;
-		} else if (targetIndex === 0) {
-			offsetX = -2;
-			forceMultiplier = 0.00003;
-		} else if (targetIndex === maxCols - 3) {
-			offsetX = Math.floor(Math.random() * 3) + 4;
-			forceMultiplier = 0.000075;
-		} else if (targetIndex === maxCols - 2) {
-			offsetX = 2;
-			forceMultiplier = 0.00005;
+		console.log(rows);
+
+		switch (targetIndex) {
+			case 1:
+				offsetX = -Math.floor(Math.random() * 3) - 4;
+				forceMultiplier = 0.000075;
+				break;
+			case 0:
+				offsetX = -2;
+				forceMultiplier = 0.00003;
+				break;
+			case rows - 1:
+				offsetX = Math.floor(Math.random() * 3) + 4;
+				forceMultiplier = 0.000075;
+				break;
+			case rows:
+				offsetX = 2;
+				forceMultiplier = 0.00005;
+				break;
 		}
 
 		const center = Math.ceil(maxCols / 2);
 		const startX = center * spacing + offsetX;
 
-		let targetX =
-			targetIndex < center
-				? targetIndex * spacing + spacing / 2.5
-				: targetIndex > center
-					? (targetIndex + 1) * spacing + spacing / 2
-					: targetIndex * spacing + spacing / 2;
+		let targetX;
+		if (targetIndex < center) {
+			targetX = targetIndex * spacing + spacing / 2.5;
+		} else if (targetIndex > center) {
+			targetX = (targetIndex + 1) * spacing + spacing / 2;
+		} else {
+			targetX = targetIndex * spacing + spacing / 2;
+		}
 
-		if (targetIndex === 1) {
-			targetX = targetIndex * spacing + spacing * 1.3;
-		} else if (targetIndex === 0) {
-			targetX = targetIndex * spacing - spacing * 0.95;
-		} else if (targetIndex === maxCols - 3) {
-			targetX = targetIndex * spacing + spacing * 0.69;
-		} else if (targetIndex === maxCols - 2) {
-			targetX = targetIndex * spacing + spacing * 1.2;
-			console.log('targetX', targetX);
+		switch (targetIndex) {
+			case 1:
+				targetX = targetIndex * spacing + spacing * 1.3;
+				break;
+			case 0:
+				targetX = targetIndex * spacing - spacing * 0.95;
+				break;
+			case rows - 1:
+				targetX = targetIndex * spacing + spacing * 0.69;
+				break;
+			case rows:
+				targetX = targetIndex * spacing + spacing * 1.2;
+				break;
+			default:
+				targetX = targetIndex * spacing + spacing / 2;
+				break;
 		}
 
 		// virtual ball
@@ -320,12 +366,14 @@
 
 			if (y > (rows + 0.65) * spacing) {
 				const finalIndex = Math.min(slotCount - 1, Math.max(0, Math.floor((x - 3) / slotWidth)));
-				totalWins += multipliers[finalIndex];
+
 				const bet = ball.bet ?? 1;
+				totalWins += multipliers[finalIndex];
 				winSum = bet * multipliers[finalIndex];
 				balance += winSum;
 				totalPlays += 1;
 				averageMultiplier = +(totalWins / totalPlays).toFixed(3);
+
 				pegs = pegs.map((p) => ({ ...p, highlighted: false }));
 				Matter.World.remove(engine.world, ball.body);
 				allBalls.splice(i, 1);
@@ -413,7 +461,7 @@
 		<aside class="board__aside">
 			{#each lastFiveWinCoeffs.slice().reverse() as coeff}
 				<div
-					class="board__aside-coeff"
+					class="board__aside--coeff"
 					style="background: {historyColors[lastFiveWinCoeffs.indexOf(coeff)]};"
 				>
 					{coeff.toFixed(2)}x
@@ -423,9 +471,9 @@
 
 		<div class="board__balance">
 			<img src="./images/usdt.png" alt="usdt image" />
-			<div class="board__balance__content">
-				<span class="board__balance__usdt">USDT</span>
-				<span class="board__balance__amount">{balance.toFixed(2)}</span>
+			<div class="board__balance--content">
+				<span class="board__balance--usdt">USDT</span>
+				<span class="board__balance--amount">{balance.toFixed(2)}</span>
 			</div>
 		</div>
 
@@ -443,7 +491,7 @@
 			{#if ball.body}
 				<div
 					class="board__ball transparent-animation"
-					style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%)`}
+					style={`transform: translate(${ball.body.position.x}px, ${ball.body.position.y}px) translate(-50%, -50%); --transparentTiming: ${TRANSPARENT_ANIMATION_DURATION}ms;`}
 				></div>
 			{:else}
 				<div class="board__ball transparent-animation"></div>
@@ -457,8 +505,8 @@
 					class:jump={jumpingMultipliers[idx]}
 					style={`left: ${idx * spacing + spacing - 1}px; background: ${multipliersColors[idx]}; width: ${spacing * 0.97}px; box-shadow: ${multipliersShadows[idx]};`}
 				>
-					<span class="board__multiplier__text">{multiplier}</span>
-					<span class="board__multiplier__text">x</span>
+					<span class="board__multiplier--text">{multiplier}</span>
+					<span class="board__multiplier--text">x</span>
 					<div class="bg-win" class:active={jumpingMultipliers[idx] && (idx < 3 || idx > 7)}></div>
 				</div>
 			{/each}
@@ -490,10 +538,10 @@
 		flex-direction: column;
 		justify-content: center;
 		align-items: center;
-		padding: 0 10px;
-		overflow: hidden;
 		width: 100%;
 		height: 100%;
+		padding: 0 10px;
+		overflow: hidden;
 	}
 
 	.board {
@@ -505,47 +553,46 @@
 	}
 
 	.board__aside {
-		width: 80px;
-		height: 200px;
-		border: 1px solid #ffffff;
-		background: #00193e;
-		border-radius: 12px;
 		position: absolute;
 		z-index: 10;
 		top: -15%;
+		width: 80px;
+		height: 200px;
 		overflow: hidden;
+		border: 1px solid #ffffff;
+		background: #00193e;
+		border-radius: 12px;
 	}
 
-	.board__aside-coeff {
+	.board__aside--coeff {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		height: 20%;
 		font-weight: 800;
 		font-size: 16px;
 		letter-spacing: 2%;
 		text-align: center;
 		-webkit-text-stroke: 0.5px solid #00000080;
-		/* background: linear-gradient(180deg, #ffd075 0%, #ffab05 100%); */
 		color: #ffffff;
-		height: 20%;
-		display: flex;
-		justify-content: center;
-		align-items: center;
 	}
 
 	.board__balance {
-		width: 150px;
-		/* height: 50px; */
 		position: absolute;
 		z-index: 10;
 		top: -20%;
 		right: -20px;
-		background: #021502;
-		border: 1px solid #0b4b16;
 		display: flex;
 		justify-content: center;
 		align-items: center;
+		gap: 5px;
+		width: 150px;
+		/* height: 50px; */
+		padding: 8px 30px;
+		background: #021502;
+		border: 1px solid #0b4b16;
 		border-top-left-radius: 40px;
 		border-bottom-left-radius: 40px;
-		padding: 8px 30px;
-		gap: 5px;
 		/* border-radius: 12px;
 		font-weight: 800;
 		font-size: 16px;
@@ -554,20 +601,20 @@
 		-webkit-text-stroke: 0.5px solid #00000080; */
 	}
 
-	.board__balance__content {
+	.board__balance--content {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
 		align-items: flex-start;
 	}
 
-	.board__balance__usdt {
+	.board__balance--usdt {
 		font-size: 12px;
 		letter-spacing: -1%;
 		color: #ababab;
 	}
 
-	.board__balance__amount {
+	.board__balance--amount {
 		font-size: 15px;
 		letter-spacing: -1%;
 		color: #ffffff;
@@ -583,26 +630,30 @@
 	}
 
 	.board__peg--start {
-		background-color: #000000;
-		box-shadow: 0px 0px 14px 0px #ffffff40;
 		left: 50%;
 		top: -20px;
 		transform: translate(-50%, -50%);
 		width: calc(var(--spacing));
 		height: calc(var(--spacing));
-		border-radius: 50%;
+		background-color: #000000;
+		box-shadow: 0px 0px 14px 0px #ffffff40;
+	}
+
+	.board__peg.highlight {
+		box-shadow: 0px 0px 4px 0px #ff0073;
+		border: 2px solid #ff1b73b2;
 	}
 
 	.board__ball {
 		position: absolute;
+		z-index: 10;
 		width: calc(var(--spacing) / 1.7);
 		height: calc(var(--spacing) / 1.7);
 		background: url('./images/ball.png');
 		border-radius: 50%;
-		z-index: 10;
 	}
 
-	.board__buttons {
+	/* .board__buttons {
 		display: flex;
 		justify-content: center;
 		flex-direction: column;
@@ -616,29 +667,54 @@
 	}
 
 	.board__difficulty__button {
+		width: 200px;
 		padding: 10px 20px;
-		font-size: 20px;
 		background: #67b640;
+		border-radius: 10px;
+		font-size: 20px;
 		color: #fff;
 		cursor: pointer;
-		border-radius: 10px;
-		width: 200px;
+	} */
+
+	.board__multipliers {
+		position: absolute;
+		bottom: -10px;
+		width: 100%;
+		height: 20px;
+		pointer-events: none;
+	}
+
+	.board__multiplier {
+		position: absolute;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		border-radius: 5px;
+		text-align: center;
+		font-weight: bold;
+		color: #fff;
+		font-size: 13px;
+		font-weight: 800;
+	}
+
+	.board__multiplier--text {
+		-webkit-text-stroke: 0.5px #00000080;
 	}
 
 	.score {
-		margin: 65px auto 0;
-		text-align: center;
-		background: url('./images/winBg.png');
-		height: 40px;
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		color: #fff;
+		width: 100%;
+		height: 40px;
+		margin: 65px auto 0;
+		background: url('./images/winBg.png');
+		border-radius: 8px;
+		box-shadow: 0px 0px 10px 0px #fec801;
+		text-align: center;
 		font-size: 22px;
 		font-weight: 700;
-		border-radius: 8px;
-		width: 100%;
-		box-shadow: 0px 0px 10px 0px #fec801;
 		color: #433600;
 	}
 
@@ -652,45 +728,19 @@
 		filter: brightness(0.9);
 	}
 
-	.board__multipliers {
-		position: absolute;
-		bottom: -10px;
-		width: 100%;
-		height: 20px;
-		pointer-events: none;
-	}
-
-	.board__multiplier {
-		position: absolute;
-		transform: translateX(-50%);
-		text-align: center;
-		font-weight: bold;
-		color: #fff;
-		font-size: 13px;
-		font-weight: 800;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		border-radius: 5px;
-	}
-
-	.board__multiplier__text {
-		-webkit-text-stroke: 0.5px #00000080;
-	}
-
 	.bg-win {
 		position: absolute;
 		left: 0%;
 		top: -170%;
 		transform: translateX(-50%);
+		transform: rotate(180deg);
+		z-index: -1;
 		width: 100%;
 		height: 100px;
 		pointer-events: none;
 		opacity: 0;
-		transform: rotate(180deg);
 		background: linear-gradient(180deg, rgba(255, 113, 82, 0.7) 0%, rgba(255, 113, 82, 0) 100%);
 		transition: opacity 0.2s ease;
-		z-index: -1;
 	}
 
 	.bg-win.active {
@@ -713,9 +763,8 @@
 		}
 	}
 
-	.board__peg.highlight {
-		box-shadow: 0px 0px 4px 0px #ff0073;
-		border: 2px solid #ff1b73b2;
+	.transparent-animation {
+		animation: var(--transparentTiming) appearing ease-in-out;
 	}
 
 	@keyframes appearing {
@@ -727,10 +776,6 @@
 			opacity: 1;
 			top: 0;
 		}
-	}
-
-	.transparent-animation {
-		animation: 0.5s appearing ease-in-out;
 	}
 
 	.board__multiplier.jump {
@@ -761,12 +806,12 @@
 	}
 
 	.bets__button {
+		padding: 12px 16px;
 		background: url('./images/betBg.png') center center no-repeat;
 		font-weight: 700;
 		font-size: 18px;
 		letter-spacing: 2%;
 		text-align: center;
-		padding: 12px 16px;
 		color: #f0ffef;
 	}
 
